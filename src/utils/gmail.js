@@ -3,13 +3,7 @@ import MailComposer from 'nodemailer/lib/mail-composer/index.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const {
-  CLIENT_ID,
-  CLIENT_SECRET,
-  REDIRECT_URI,
-  REFRESH_TOKEN
-} = process.env;
-
+const { CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, REFRESH_TOKEN } = process.env;
 function getOauth2Client() {
   const oauth2Client = new google.auth.OAuth2(
     CLIENT_ID, CLIENT_SECRET, REDIRECT_URI
@@ -21,11 +15,10 @@ function getOauth2Client() {
 /**
  * Creates a Gmail draft, optionally with attachments.
  *
- * @param {string}    to
- * @param {string}    subject
- * @param {string}    htmlBody
- * @param {{filename:string, content:Buffer, contentType:string}[]} [attachments]
- * @returns {Promise<string>} draft ID
+ * @param {string} to
+ * @param {string} subject
+ * @param {string} htmlBody
+ * @param {Array<{filename:string,content:string,contentType:string,encoding:string}>} attachments
  */
 export async function saveGmailDraft(to, subject, htmlBody, attachments = []) {
   const oauth2Client = getOauth2Client();
@@ -36,11 +29,7 @@ export async function saveGmailDraft(to, subject, htmlBody, attachments = []) {
     to,
     subject,
     html: htmlBody,
-    attachments: attachments.map(att => ({
-      filename: att.filename,
-      content: att.content,
-      contentType: att.contentType
-    }))
+    attachments
   });
 
   const messageBuffer = await mail.compile().build();
