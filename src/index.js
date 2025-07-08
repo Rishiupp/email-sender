@@ -1,10 +1,15 @@
 import express from 'express';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import fetch from 'node-fetch';
+import PDFDocument from 'pdfkit';
+import getStream from 'get-stream';       // to collect the PDF into a buffer
 import { saveGmailDraft } from './utils/gmail.js';
 
 dotenv.config();
+
 const app = express();
+const __dirname = dirname(fileURLToPath(import.meta.url));
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
@@ -19,12 +24,12 @@ app.post('/api/create-gmail-draft', async (req, res) => {
     }
 
     // 2) Payload validation
-    const { to, result_message, pdf_url } = req.body;
+    const { to, result_message } = req.body;
     if (!to || !result_message) {
       return res.status(400).json({ success: false, error: 'Missing `to` or `result_message`' });
     }
 
-    // 3) HTML body
+    // 3) Build HTML body for the email
     const subject = 'Your EMI Calculation Result';
     const htmlBody = `
       <p>Hi there,</p>
@@ -32,22 +37,35 @@ app.post('/api/create-gmail-draft', async (req, res) => {
       <p>Thanks,<br>Your Company</p>
     `;
 
-    // 4) Fetch & base64‑encode PDF if provided
-    let attachments = [];
-    if (pdf_url) {
-      const fetchRes = await fetch(pdf_url);
-      if (!fetchRes.ok) throw new Error(`Could not fetch PDF: ${fetchRes.statusText}`);
-      const pdfBuffer = await fetchRes.buffer();
-      attachments.push({
-        filename: 'attachment.pdf',
-        content: pdfBuffer.toString('base64'),
-        encoding: 'base64',
-        contentType: 'application/pdf'
-      });
-    }
+    // 4) Generate a PDF on the fly containing the same text
+    const doc = new PDFDocument({ margin: 40 });
+    doc.fontSize(12).text('EMI Calculation Result', { underline: true });
+    doc.moveDown();
 
-    // 5) Save draft
+    // Split lines and write them
+    result_message.split('\n').forEach(line => {
+      doc.text(line);
+    });
+
+    doc.moveDown();
+    doc.text('Thanks,');
+    doc.text('Your Company');
+
+    doc.end();
+    // Collect the PDF into a Buffer
+    const pdfBuffer = await getStream.buffer(doc);
+
+    // 5) Prepare the attachment (base64-encoded)
+    const attachments = [{
+      filename: 'EMI_Result.pdf',
+      content: pdfBuffer.toString('base64'),
+      encoding: 'base64',
+      contentType: 'application/pdf'
+    }];
+
+    // 6) Create the Gmail draft with PDF attached
     const draftId = await saveGmailDraft(to, subject, htmlBody, attachments);
+
     return res.json({ success: true, draftId });
   }
   catch (err) {
